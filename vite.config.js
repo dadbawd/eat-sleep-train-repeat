@@ -6,6 +6,11 @@ import { VitePWA } from 'vite-plugin-pwa';
 // The app is installable to the home screen and works fully offline:
 // all logging, parsing, and history live in localStorage with no backend.
 export default defineConfig({
+  server: {
+    // the app calls /api/* on its own origin; vite forwards to the AI backend,
+    // so phones on the LAN reach it through the same address as the app
+    proxy: { '/api': 'http://localhost:8787' },
+  },
   plugins: [
     react(),
     VitePWA({

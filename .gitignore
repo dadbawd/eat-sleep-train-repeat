@@ -2,6 +2,9 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# secrets — the Claude API key lives here; never commit
+.env
 .DS_Store
 .vite
 

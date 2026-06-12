@@ -5,6 +5,7 @@ import {
   parseFood, parseWorkout, FOOD_DB, LIFT_NAMES, CARDIO_NAMES,
   titleCase, makeCardio, fmtMins, computeInsight,
 } from './data.js';
+import { aiComplete, aiAvailable } from './ai.js';
 
 // shared lazy text input with optional typeahead suggestions
 // `placeholder` may be a string or an array — arrays rotate with a quiet fade while empty
@@ -161,7 +162,7 @@ Rules:
 User input: "{USER_TEXT}"`;
 
 async function aiParseFood(text){
-  const raw = await window.claude.complete(FOOD_PROMPT.replace('{USER_TEXT}', text.replace(/"/g, "'")));
+  const raw = await aiComplete(FOOD_PROMPT.replace('{USER_TEXT}', text.replace(/"/g, "'")));
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) throw new Error('no json');
   return JSON.parse(m[0]);
@@ -201,7 +202,7 @@ async function aiParseWorkout(text, sessions){
   const prompt = WORKOUT_PROMPT
     .replace('{RECENT_WORKOUTS_JSON}', JSON.stringify(ctx))
     .replace('{USER_TEXT}', text.replace(/"/g, "'"));
-  const raw = await window.claude.complete(prompt);
+  const raw = await aiComplete(prompt);
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) throw new Error('no json');
   return JSON.parse(m[0]);
@@ -268,7 +269,7 @@ function EatScreen({ onBack, foodLog, setFoodLog }) {
   };
   // ask the AI engine; fall back to the local result on error / offline
   const runAI = async (raw, localFallback) => {
-    if (!(window.claude && window.claude.complete)) { localFallback(); return; }
+    if (!aiAvailable()) { localFallback(); return; }
     setLoading(true);
     try { handleAI(await aiParseFood(raw)); }
     catch (e) { localFallback(); }
@@ -410,7 +411,7 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
     else setMatched(null);
   };
   const runAI = async raw => {
-    if (!(window.claude && window.claude.complete)) { const r = parseWorkout(raw); addItems(r.items); return; }
+    if (!aiAvailable()) { const r = parseWorkout(raw); addItems(r.items); return; }
     setLoading(true);
     try { handleAI(await aiParseWorkout(raw, sessions)); }
     catch (e) { const r = parseWorkout(raw); addItems(r.items); }

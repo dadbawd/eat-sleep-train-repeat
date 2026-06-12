@@ -6,16 +6,20 @@
   "description": "Eat / Sleep / Train / Repeat — a minimalist daily health tracker (PWA).",
   "scripts": {
     "icons": "node scripts/generate-icons.mjs",
-    "dev": "vite --host",
+    "server": "node --env-file-if-exists=.env server/index.js",
+    "dev": "concurrently -n ai,app -c blue,green \"npm run server\" \"vite --host --port 5174 --strictPort\"",
     "build": "npm run icons && vite build",
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
+    "express": "^5.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^10.0.3",
     "vite": "^6.0.7",
     "vite-plugin-pwa": "^0.21.1"
   }
