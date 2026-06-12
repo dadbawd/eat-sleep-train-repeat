@@ -30,7 +30,10 @@ button{ font-family:inherit; }
 @keyframes sfade{ from{ opacity:0; transform:translateY(8px);} to{ opacity:1; transform:none; } }
 .pop{ animation:pop var(--t) cubic-bezier(.2,.7,.3,1); }
 @keyframes pop{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none; } }
-@media (prefers-reduced-motion:reduce){ .screenfade,.pop{ animation:none; } }
+/* newly logged rows land with a brief accent flash on their left edge */
+.pop.flash{ animation:pop var(--t) cubic-bezier(.2,.7,.3,1), rowflash 750ms ease-out; }
+@keyframes rowflash{ from{ box-shadow:inset 3px 0 0 var(--accent); } to{ box-shadow:inset 3px 0 0 transparent; } }
+@media (prefers-reduced-motion:reduce){ .screenfade,.pop,.pop.flash{ animation:none; } }
 
 /* ── home ────────────────────────────────────────────── */
 .home{ flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column;
@@ -50,6 +53,9 @@ button{ font-family:inherit; }
 }
 .homebtn:hover{ border-color:#3d4450; }
 .homebtn:active{ transform:scale(.992); border-color:var(--btn-accent, var(--accent)); }
+.hb-left{ display:flex; align-items:center; gap:15px; }
+.hb-glyph{ display:flex; opacity:.42; transition:opacity var(--t); }
+.homebtn:active .hb-glyph{ opacity:.9; }
 .hb-label{ font-size:40px; font-weight:800; letter-spacing:2px; }
 .hb-right{ display:flex; align-items:center; gap:14px; }
 .hb-sub{ font-family:var(--mono); font-size:12px; color:var(--text-dim); letter-spacing:.5px; }
@@ -219,7 +225,9 @@ button{ font-family:inherit; }
 
 /* sleep */
 .sleepwrap{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:24px; padding-bottom:30px; }
+  gap:24px; padding-bottom:30px;
+  background:radial-gradient(ellipse 90% 55% at 50% 0%,
+    color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%); }
 .sleep-since{ font-family:var(--mono); font-size:12px; letter-spacing:1px; color:var(--text-dim); }
 .sleep-timer{ font-family:var(--mono); font-size:44px; color:var(--accent); font-weight:500; letter-spacing:1px; }
 .sleep-last{ font-family:var(--mono); font-size:52px; color:var(--text); font-weight:500; }
@@ -227,7 +235,14 @@ button{ font-family:inherit; }
   background:var(--surface); color:var(--text); font-size:21px; font-weight:600; cursor:pointer;
   transition:all var(--t); }
 .sleepbtn:active{ transform:scale(.97); }
-.sleepbtn.awake{ border-color:var(--accent); color:var(--accent); box-shadow:0 0 50px -14px var(--accent); }
+.sleepbtn.awake{ border-color:var(--accent); color:var(--accent); box-shadow:0 0 50px -14px var(--accent);
+  animation:breathe 4.5s ease-in-out infinite; }
+/* while in bed, the glow breathes — slow, like a sleep light */
+@keyframes breathe{
+  0%,100%{ box-shadow:0 0 46px -16px var(--accent); }
+  50%{ box-shadow:0 0 85px -6px var(--accent); }
+}
+@media (prefers-reduced-motion:reduce){ .sleepbtn.awake{ animation:none; } }
 .sleep-hint{ font-size:13px; color:var(--text-faint); max-width:230px; text-align:center; line-height:1.5; }
 
 /* repeat */

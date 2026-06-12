@@ -1,6 +1,6 @@
 /* Eat Sleep Train — screens. */
 import { useState, useEffect, useRef } from 'react';
-import { Chevron, Screen, Sparkline, LoopGlyph, fmt, fmtDuration, fmtClock } from './ui.jsx';
+import { Chevron, Screen, Sparkline, LoopGlyph, fmt, fmtDuration, fmtClock, useRollUp } from './ui.jsx';
 import {
   parseFood, parseWorkout, FOOD_DB, LIFT_NAMES, CARDIO_NAMES,
   titleCase, makeCardio, fmtMins, computeInsight,
@@ -224,11 +224,14 @@ let _fid = 0;
 function EatScreen({ onBack, foodLog, setFoodLog }) {
   const [pending, setPending] = useState(null);   // ambiguous clarify
   const [loading, setLoading] = useState(false);   // AI in flight
-  const kcal = foodLog.reduce((s, f) => s + f.kcal, 0);
-  const protein = foodLog.reduce((s, f) => s + f.protein, 0);
+  const [flashIds, setFlashIds] = useState(() => new Set());  // rows logged this visit
+  const kcal = useRollUp(foodLog.reduce((s, f) => s + f.kcal, 0));
+  const protein = useRollUp(foodLog.reduce((s, f) => s + f.protein, 0));
 
   const addItems = items => {
-    setFoodLog(prev => [...items.map(it => ({ ...it, id: `${Date.now()}_${++_fid}` })), ...prev]);
+    const stamped = items.map(it => ({ ...it, id: `${Date.now()}_${++_fid}` }));
+    setFlashIds(prev => new Set([...prev, ...stamped.map(s => s.id)]));
+    setFoodLog(prev => [...stamped, ...prev]);
   };
 
   const cleanQty = (q, name = '') => {
@@ -335,7 +338,7 @@ function EatScreen({ onBack, foodLog, setFoodLog }) {
           <div className="empty">Type what you ate. No portions, no labels.</div>
         )}
         {foodLog.map(f => (
-          <div key={f.id} className={'logitem tappable pop' + (editId === f.id ? ' editing' : '')}
+          <div key={f.id} className={'logitem tappable pop' + (flashIds.has(f.id) ? ' flash' : '') + (editId === f.id ? ' editing' : '')}
                onClick={() => setEditId(editId === f.id ? null : f.id)}>
             <div className="logitem-name">
               {f.qtyLabel ? <span className="qty">{f.qtyLabel} </span> : f.qty > 1 ? <span className="qty">{f.qty}× </span> : null}{f.name}
@@ -362,11 +365,16 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [matched, setMatched] = useState(null);   // {label, session} repeat suggestion
+  const [flashIds, setFlashIds] = useState(() => new Set());  // rows logged this visit
   const lifts = trainLog.filter(t => t.kind === 'lift').length;
   const cardio = trainLog.filter(t => t.kind === 'cardio').length;
-  const volume = trainLog.reduce((s, t) => s + (t.volume || 0), 0);
+  const volume = useRollUp(trainLog.reduce((s, t) => s + (t.volume || 0), 0));
 
-  const addItems = items => setTrainLog(prev => [...items.map(it => ({ ...it, id: `${Date.now()}_${++_tid}` })), ...prev]);
+  const addItems = items => {
+    const stamped = items.map(it => ({ ...it, id: `${Date.now()}_${++_tid}` }));
+    setFlashIds(prev => new Set([...prev, ...stamped.map(s => s.id)]));
+    setTrainLog(prev => [...stamped, ...prev]);
+  };
 
   // log a whole saved session's exercises in one tap (lifts + cardio)
   const logSession = sess => {
@@ -521,7 +529,7 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
               <button className="row-remove" onClick={() => removeEntry(t.id)}>REMOVE</button>
             </div>
           ) : (
-            <div key={t.id} className="liftcard tappable pop" onClick={() => setEditId(t.id)} title="Tap to edit">
+            <div key={t.id} className={'liftcard tappable pop' + (flashIds.has(t.id) ? ' flash' : '')} onClick={() => setEditId(t.id)} title="Tap to edit">
               <div className="lift-top">
                 <span className="lift-name">{t.name}</span>
                 {t.weight != null && t.volume
@@ -569,7 +577,7 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
               <button className="row-remove" onClick={() => removeEntry(t.id)}>REMOVE</button>
             </div>
           ) : (
-            <div key={t.id} className="liftcard tappable pop" onClick={() => setEditId(t.id)} title="Tap to edit">
+            <div key={t.id} className={'liftcard tappable pop' + (flashIds.has(t.id) ? ' flash' : '')} onClick={() => setEditId(t.id)} title="Tap to edit">
               <div className="lift-top">
                 <span className="lift-name">{t.name}</span>
                 <span className="kindtag cardio">cardio</span>
@@ -592,7 +600,7 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
             </div>
           )
         ) : (
-          <div key={t.id} className={'logitem tappable pop' + (editId === t.id ? ' editing' : '')}
+          <div key={t.id} className={'logitem tappable pop' + (flashIds.has(t.id) ? ' flash' : '') + (editId === t.id ? ' editing' : '')}
                onClick={() => setEditId(editId === t.id ? null : t.id)}>
             <div className="logitem-name">
               {t.name}

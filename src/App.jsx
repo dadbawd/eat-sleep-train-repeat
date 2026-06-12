@@ -1,6 +1,6 @@
 /* Eat Sleep Train — Home + App root. */
 import { useState, useEffect, useRef } from 'react';
-import { Chevron, LoopGlyph, Sparkline, fmt, fmtDuration } from './ui.jsx';
+import { Chevron, LoopGlyph, PlateGlyph, MoonGlyph, BarbellGlyph, Sparkline, fmt, fmtDuration } from './ui.jsx';
 import { EatScreen, SleepScreen, TrainScreen, RepeatScreen } from './screens.jsx';
 import { reconcileHistory, EMPTY_WORKING, computeTotals, recentSessions } from './data.js';
 
@@ -8,10 +8,13 @@ function StatusDot({ on, hue }) {
   return <span className={'sdot' + (on ? ' on' : '')} style={on && hue ? { background: hue, boxShadow: `0 0 9px ${hue}` } : undefined} />;
 }
 
-function HomeButton({ label, sub, on, onClick, hue }) {
+function HomeButton({ label, sub, on, onClick, hue, icon: Icon }) {
   return (
     <button className="homebtn" onClick={onClick} style={hue ? { '--btn-accent': hue } : undefined}>
-      <span className="hb-label">{label}</span>
+      <span className="hb-left">
+        {Icon ? <span className="hb-glyph"><Icon size={19} color={hue || 'var(--accent)'} /></span> : null}
+        <span className="hb-label">{label}</span>
+      </span>
       <span className="hb-right">
         <span className="hb-sub">{sub}</span>
         <StatusDot on={on} hue={hue} />
@@ -47,9 +50,9 @@ function Home({ go, foodLog, trainLog, sleep, today, btnStyle, hues, history }) 
       </div>
 
       <div className={'homebtns ' + btnStyle}>
-        <HomeButton label="EAT"   sub={`${fmt(kcal)} kcal`} on={foodLog.length>0} hue={hues.eat} onClick={() => go('eat')} />
-        <HomeButton label="SLEEP" sub={sleep.sleeping ? 'awake?' : ''} on={!!sleep.lastDuration || sleep.sleeping} hue={hues.sleep} onClick={() => go('sleep')} />
-        <HomeButton label="TRAIN" sub={trainLog.length ? `${lifts+cardio} logged` : ''} on={trainLog.length>0} hue={hues.train} onClick={() => go('train')} />
+        <HomeButton label="EAT"   sub={`${fmt(kcal)} kcal`} on={foodLog.length>0} hue={hues.eat} icon={PlateGlyph} onClick={() => go('eat')} />
+        <HomeButton label="SLEEP" sub={sleep.sleeping ? 'awake?' : ''} on={!!sleep.lastDuration || sleep.sleeping} hue={hues.sleep} icon={MoonGlyph} onClick={() => go('sleep')} />
+        <HomeButton label="TRAIN" sub={trainLog.length ? `${lifts+cardio} logged` : ''} on={trainLog.length>0} hue={hues.train} icon={BarbellGlyph} onClick={() => go('train')} />
       </div>
 
       <div className="summary">

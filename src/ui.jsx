@@ -1,4 +1,5 @@
-/* Eat Sleep Train — shared UI primitives. Exports to window. */
+/* Eat Sleep Train — shared UI primitives. */
+import { useState, useEffect, useRef } from 'react';
 
 // Chevron / glyphs (kept dead simple)
 function Chevron({ dir = 'right', size = 16, color = 'currentColor', w = 2 }) {
@@ -20,6 +21,56 @@ function LoopGlyph({ size = 16, color = 'currentColor' }) {
       <path d="M14 3v3h-3M6 17v-3h3" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+}
+
+// pillar glyphs — one quiet mark per pillar (plate / moon / barbell)
+function PlateGlyph({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" style={{ display: 'block' }}>
+      <circle cx="10" cy="10" r="7" stroke={color} strokeWidth="1.6" />
+      <circle cx="10" cy="10" r="2.6" stroke={color} strokeWidth="1.6" />
+    </svg>
+  );
+}
+function MoonGlyph({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" style={{ display: 'block' }}>
+      <path d="M15.5 12.2A6.6 6.6 0 0 1 7.8 4.5a6.6 6.6 0 1 0 7.7 7.7z"
+            stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function BarbellGlyph({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" style={{ display: 'block' }}>
+      <path d="M2.5 10h15M5.5 6.5v7M14.5 6.5v7" stroke={color} strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ── Rolling number ──────────────────────────────────────────────────
+// Animates toward `value` when it changes while mounted (no animation on
+// first render, and none at all under prefers-reduced-motion).
+function useRollUp(value, ms = 380){
+  const [disp, setDisp] = useState(value);
+  const prev = useRef(value);
+  useEffect(() => {
+    const from = prev.current, to = value;
+    if (from === to) return;
+    prev.current = to;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches){ setDisp(to); return; }
+    const t0 = performance.now();
+    let raf;
+    const tick = now => {
+      const p = Math.min(1, (now - t0) / ms);
+      const e = 1 - Math.pow(1 - p, 3);   // ease-out cubic
+      setDisp(from + (to - from) * e);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, ms]);
+  return disp;
 }
 
 // number formatting
@@ -97,4 +148,4 @@ function Screen({ title, onBack, children, right }) {
   );
 }
 
-export { Chevron, LoopGlyph, Sparkline, Bar, Screen, fmt, fmtDuration, fmtClock };
+export { Chevron, LoopGlyph, PlateGlyph, MoonGlyph, BarbellGlyph, Sparkline, Bar, Screen, fmt, fmtDuration, fmtClock, useRollUp };

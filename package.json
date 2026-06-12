@@ -6,9 +6,9 @@
   "description": "Eat / Sleep / Train / Repeat — a minimalist daily health tracker (PWA).",
   "scripts": {
     "icons": "node scripts/generate-icons.mjs",
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "npm run icons && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --host"
   },
   "dependencies": {
     "react": "^18.3.1",
