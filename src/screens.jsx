@@ -639,19 +639,22 @@ function SleepScreen({ onBack, sleep, setSleep }) {
   return (
     <Screen title="SLEEP" onBack={onBack}>
       <div className={'sleepwrap' + (sleep.sleeping ? ' asleep' : '')}>
-        {sleep.sleeping ? (
-          <>
-            <div className="sleep-since">In bed since {new Date(sleep.bedAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</div>
-            <div className="sleep-timer">{fmtClock(elapsed)}</div>
-          </>
-        ) : sleep.lastDuration ? (
-          <>
-            <div className="sleep-since">Last night</div>
-            <div className="sleep-last">{fmtDuration(sleep.lastDuration)}</div>
-          </>
-        ) : (
-          <div className="sleep-since">No sleep logged yet</div>
-        )}
+        {/* fixed-height slot so the button never moves when the timer appears */}
+        <div className="sleep-status">
+          {sleep.sleeping ? (
+            <>
+              <div className="sleep-since">In bed since {new Date(sleep.bedAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</div>
+              <div className="sleep-timer">{fmtClock(elapsed)}</div>
+            </>
+          ) : sleep.lastDuration ? (
+            <>
+              <div className="sleep-since">Last night</div>
+              <div className="sleep-last">{fmtDuration(sleep.lastDuration)}</div>
+            </>
+          ) : (
+            <div className="sleep-since">No sleep logged yet</div>
+          )}
+        </div>
 
         <button className={'sleepbtn' + (sleep.sleeping ? ' awake' : '')} onClick={toggle}>
           {sleep.sleeping ? "I’m awake" : 'Going to bed'}
