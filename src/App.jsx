@@ -1,18 +1,28 @@
 /* Eat Sleep Train — Home + App root. */
 import { useState, useEffect, useRef } from 'react';
-import { Chevron, LoopGlyph, PlateGlyph, MoonGlyph, BarbellGlyph, Sparkline, fmt, fmtDuration } from './ui.jsx';
+import { Chevron, LoopGlyph, Sparkline, fmt, fmtDuration } from './ui.jsx';
 import { EatScreen, SleepScreen, TrainScreen, RepeatScreen } from './screens.jsx';
 import { reconcileHistory, EMPTY_WORKING, computeTotals, recentSessions } from './data.js';
+
+const PILLAR_ICONS = {
+  eat: '/pillar-icons/eat-icon.png',
+  sleep: '/pillar-icons/sleep-icon.png',
+  train: '/pillar-icons/train-icon.png',
+};
 
 function StatusDot({ on, hue }) {
   return <span className={'sdot' + (on ? ' on' : '')} style={on && hue ? { background: hue, boxShadow: `0 0 9px ${hue}` } : undefined} />;
 }
 
-function HomeButton({ label, sub, on, onClick, hue, icon: Icon }) {
+function PillarAsset({ type, size = 28 }) {
+  return <img className="pillar-asset" src={PILLAR_ICONS[type]} alt="" width={size} height={size} draggable="false" />;
+}
+
+function HomeButton({ label, sub, on, onClick, hue, iconType }) {
   return (
     <button className="homebtn" onClick={onClick} style={hue ? { '--btn-accent': hue } : undefined}>
       <span className="hb-left">
-        {Icon ? <span className="hb-glyph"><Icon size={19} color={hue || 'var(--accent)'} /></span> : null}
+        {iconType ? <span className="hb-glyph"><PillarAsset type={iconType} size={42} /></span> : null}
         <span className="hb-label">{label}</span>
       </span>
       <span className="hb-right">
@@ -45,44 +55,76 @@ function Home({ go, foodLog, trainLog, sleep, today, btnStyle, hues, history }) 
   return (
     <div className="home">
       <div className="home-head">
-        <div className="wordmark">EAT<span>/</span>SLEEP<span>/</span>TRAIN</div>
-        <div className="datestr">{dateStr}</div>
+        <img className="brand-logo" src="/brand/estr-logo.png" alt="ESTR" width="120" height="30" draggable="false" />
+        <button className="datebtn" type="button" onClick={() => go('repeat')} aria-label="Open date history">
+          <span className="datebtn-icon" aria-hidden="true" />
+          <span>{dateStr}</span>
+        </button>
       </div>
 
       <div className={'homebtns ' + btnStyle}>
-        <HomeButton label="EAT"   sub={`${fmt(kcal)} kcal`} on={foodLog.length>0} hue={hues.eat} icon={PlateGlyph} onClick={() => go('eat')} />
-        <HomeButton label="SLEEP" sub={sleep.sleeping ? 'awake?' : ''} on={!!sleep.lastDuration || sleep.sleeping} hue={hues.sleep} icon={MoonGlyph} onClick={() => go('sleep')} />
-        <HomeButton label="TRAIN" sub={trainLog.length ? `${lifts+cardio} logged` : ''} on={trainLog.length>0} hue={hues.train} icon={BarbellGlyph} onClick={() => go('train')} />
+        <HomeButton label="EAT"   sub={`${fmt(kcal)} kcal`} on={foodLog.length>0} hue={hues.eat} iconType="eat" onClick={() => go('eat')} />
+        <HomeButton label="SLEEP" sub={sleep.sleeping ? 'awake?' : ''} on={!!sleep.lastDuration || sleep.sleeping} hue={hues.sleep} iconType="sleep" onClick={() => go('sleep')} />
+        <HomeButton label="TRAIN" sub={trainLog.length ? `${lifts+cardio} logged` : ''} on={trainLog.length>0} hue={hues.train} iconType="train" onClick={() => go('train')} />
       </div>
 
       <div className="summary">
-        <div className="sum-label">TODAY</div>
-        <div className="sum-grid">
-          <div className="sum-cell">
+        <div className="sum-head">
+          <div>
+            <div className="sum-label">TODAY</div>
+            <div className="sum-date">{dateStr}</div>
+          </div>
+          <span className={'sum-live' + (today.hasData ? ' on' : '')}>{today.hasData ? 'ACTIVE' : 'OPEN'}</span>
+        </div>
+
+        <div className="sum-primary">
+          <div className="sum-tile" style={{ '--metric': hues.eat }}>
+            <div className="sum-tile-top">
+              <PillarAsset type="eat" size={21} />
+              <span>CALORIES</span>
+            </div>
             <div className="sum-num">{fmt(kcal)}</div>
-            <div className="sum-cap">CALORIES</div>
           </div>
-          <div className="sum-cell">
+          <div className="sum-tile" style={{ '--metric': hues.eat }}>
+            <div className="sum-tile-top">
+              <PillarAsset type="eat" size={21} />
+              <span>PROTEIN</span>
+            </div>
             <div className="sum-num">{fmt(protein)}<span className="sum-of">g</span></div>
-            <div className="sum-cap">PROTEIN</div>
           </div>
-          <div className="sum-cell line">
-            <div className="sum-stat">{sleepStr}</div>
-            <div className="sum-cap">SLEEP</div>
+        </div>
+
+        <div className="sum-status">
+          <div className="sum-row" style={{ '--metric': hues.sleep }}>
+            <span className="sum-row-icon"><PillarAsset type="sleep" size={25} /></span>
+            <span className="sum-row-copy">
+              <span className="sum-cap">SLEEP</span>
+              <span className="sum-stat">{sleepStr}</span>
+            </span>
           </div>
-          <div className="sum-cell line">
-            <div className="sum-stat">{trainStr}</div>
-            <div className="sum-cap">TRAINING</div>
+          <div className="sum-row" style={{ '--metric': hues.train }}>
+            <span className="sum-row-icon"><PillarAsset type="train" size={25} /></span>
+            <span className="sum-row-copy">
+              <span className="sum-cap">TRAINING</span>
+              <span className="sum-stat">{trainStr}</span>
+            </span>
           </div>
         </div>
       </div>
 
       <button className="repeatstrip" onClick={() => go('repeat')}>
         <span className="rs-left">
-          <LoopGlyph size={16} color="var(--text-dim)" />
-          <span className="rs-text"><b>REPEAT</b><i>{hasTrend ? 'your patterns' : 'patterns build as you log'}</i></span>
+          <span className="rs-orbit"><LoopGlyph size={17} color="var(--accent)" /></span>
+          <span className="rs-text">
+            <span className="rs-kicker">LOOP</span>
+            <b>REPEAT</b>
+            <i>{hasTrend ? 'your patterns are waking up' : 'patterns build as you log'}</i>
+          </span>
         </span>
-        <Sparkline data={miniData} width={92} height={26} accent="var(--accent)" />
+        <span className="rs-viz">
+          <Sparkline data={miniData} width={104} height={30} accent="var(--accent)" />
+          <span className="rs-pulse" />
+        </span>
       </button>
     </div>
   );
@@ -162,7 +204,7 @@ export default function App(){
   else if (screen === 'repeat') body = <RepeatScreen onBack={back} today={today} history={history} colors={repeatColors} />;
 
   return (
-    <div className="app" style={{ '--accent': screenAccent, '--eat': PILLARS.eat, '--sleep': PILLARS.sleep, '--train': PILLARS.train, '--t': motionMs }}>
+    <div className="app" data-screen={screen} style={{ '--accent': screenAccent, '--eat': PILLARS.eat, '--sleep': PILLARS.sleep, '--train': PILLARS.train, '--t': motionMs }}>
       <div key={anim} className="screenfade">{body}</div>
     </div>
   );

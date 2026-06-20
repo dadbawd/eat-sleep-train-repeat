@@ -7,6 +7,7 @@ dist-ssr
 .env
 .DS_Store
 .vite
+dev-server*.log
 
 # generated PWA icons (rebuilt by `npm run icons` on every build)
 public/icon-192.png
