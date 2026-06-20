@@ -357,19 +357,23 @@ function parseFood(raw){
     };
   }
 
-  // known chain dish (instant)
-  for (const [key, dish] of Object.entries(CHAIN_DISHES)) {
-    const parts = key.split(' ');
-    if (parts.every(p => text.includes(p)))
-      return { items: [{ name: dish.name, kcal: dish.kcal, protein: dish.protein, qty: 1 }] };
-  }
-
   const items = [];
   const unknown = [];
   let uncertain = false;   // matched only part of a chunk → composite/branded, prefer AI
 
-  // protect dish names containing "and" (mac and cheese) from the and-splitter
   let working = raw.toLowerCase();
+
+  // known chain dishes: resolve + strip, but keep parsing the rest of the
+  // sentence so "big mac and large fries" doesn't lose the fries.
+  for (const [key, dish] of Object.entries(CHAIN_DISHES)) {
+    const re = new RegExp('\\b' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+    if (re.test(working)) {
+      items.push({ name: dish.name, kcal: dish.kcal, protein: dish.protein, qty: 1 });
+      working = working.replace(re, ' , ');   // remove so the remainder still splits
+    }
+  }
+
+  // protect dish names containing "and" (mac and cheese) from the and-splitter
   for (const key of Object.keys(FOOD_DB)) {
     if (!key.includes(' and ')) continue;
     const re = new RegExp('\\b' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
