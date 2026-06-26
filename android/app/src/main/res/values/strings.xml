@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Eat Sleep Train Repeat</string>
+    <string name="title_activity_main">Eat Sleep Train Repeat</string>
+    <string name="package_name">io.estr.repeat</string>
+    <string name="custom_url_scheme">io.estr.repeat</string>
+</resources>
