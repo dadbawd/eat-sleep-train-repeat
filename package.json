@@ -9,15 +9,21 @@
     "server": "node --env-file-if-exists=.env server/index.js",
     "dev": "concurrently -n ai,app -c blue,green \"npm run server\" \"vite --host --port 5174 --strictPort\"",
     "build": "npm run icons && vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "cap:sync": "npm run build && cap sync",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
     "express": "^5.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^10.0.3",
     "vite": "^6.0.7",
