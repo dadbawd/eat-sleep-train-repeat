@@ -1,8 +1,8 @@
 /* Eat Sleep Train — Home + App root. */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Chevron, LoopGlyph, Sparkline, fmt, fmtDuration } from './ui.jsx';
 import { EatScreen, SleepScreen, TrainScreen, RepeatScreen } from './screens.jsx';
-import { reconcileHistory, EMPTY_WORKING, computeTotals, recentSessions } from './data.js';
+import { reconcileHistory, EMPTY_WORKING, computeTotals, recentSessions, normalizeLift } from './data.js';
 
 const PILLAR_ICONS = {
   eat: '/pillar-icons/eat-icon.png',
@@ -147,16 +147,24 @@ function loadState(){
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; }
 }
 
+// Reconcile the calendar EXACTLY ONCE per page load, here at module-eval time — before
+// any render. reconcileHistory has a side effect (it persists the advanced date), so it
+// must not run inside the component: StrictMode double-renders AND simulates an
+// unmount/remount, both of which would re-run it, see the date already advanced, and drop
+// the daily-reset signal — leaving today's log uncleared. Module scope is immune to all of
+// that. The focus/visibilitychange handler below covers the long-running (no-reload) case.
+const _saved = loadState();
+const _recon = reconcileHistory(_saved);
+
 export default function App(){
   const t = TWEAK_DEFAULTS;
-  const saved = useRef(loadState()).current;
-  // reconcile the calendar BEFORE first paint: snapshot/roll over if the date advanced
-  const recon = useRef(reconcileHistory(saved)).current;
+  const saved = _saved;
+  const recon = _recon;
   const rolledInit = !!recon.reset;
 
   const [screen, setScreen] = useState('home');
   const [foodLog, setFoodLog]   = useState(rolledInit ? [] : (saved.foodLog || []));
-  const [trainLog, setTrainLog] = useState(rolledInit ? [] : (saved.trainLog || []));
+  const [trainLog, setTrainLog] = useState(rolledInit ? [] : (saved.trainLog || []).map(normalizeLift));
   const [sleep, setSleep]       = useState(rolledInit ? { ...EMPTY_WORKING.sleep } : (saved.sleep || { sleeping: false, bedAt: null, lastDuration: null, lastEnd: null }));
   const [history, setHistory]   = useState(recon.history);
   const [anim, setAnim] = useState('home');

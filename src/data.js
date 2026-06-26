@@ -657,14 +657,9 @@ function parseWorkout(raw){
             .replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
           name = cleaned ? titleCase(cleaned) : 'Exercise';
         }
-        const e1rm = (weight != null && reps) ? Math.round(weight * (1 + reps / 30)) : null;
-        const volume = (weight != null && sets && reps) ? sets * reps * weight
-                     : (sets && reps) ? sets * reps : 0;
-        const detail = [
-          (sets && reps) ? `${sets} × ${reps}` : reps ? `${reps} reps` : sets ? `${sets} sets` : '',
-          weight != null ? `${weight} lb` : '',
-        ].filter(Boolean).join('  @  ');
-        items.push({ kind: 'lift', name, sets, reps, weight, e1rm, volume, detail });
+        const setRows = makeSetRows(sets, reps, weight);
+        const d = liftDerived(setRows);
+        items.push({ kind: 'lift', name, setRows, e1rm: d.e1rm, volume: d.volume });
         continue;
       }
 
@@ -672,7 +667,7 @@ function parseWorkout(raw){
       let known = null, kl = 0;
       for (const k of Object.keys(LIFT_NAMES)) if (low.includes(k) && k.length > kl){ known = LIFT_NAMES[k]; kl = k.length; }
       if (known) {
-        items.push({ kind: 'lift', name: known, sets: null, reps: null, weight: null, e1rm: null, volume: 0, detail: 'logged' });
+        items.push({ kind: 'lift', name: known, setRows: makeSetRows(null, null, null), e1rm: null, volume: 0 });
         continue;
       }
     }
@@ -702,8 +697,50 @@ const GOALS = { kcal: 2400, protein: 170 };
 //  days are snapshotted here on rollover. Reconciled on load + focus.
 // ════════════════════════════════════════════════════════════════════
 const HIST_KEY = 'est-history-v1';
+const WORKOUTS_KEY = 'est-workouts-v1';
 const DAY_MS = 86400000;
 const EMPTY_WORKING = { foodLog: [], trainLog: [], sleep: { sleeping: false, bedAt: null, lastDuration: null, lastEnd: null } };
+
+// ── per-set lift model ──────────────────────────────────────────────
+// A lift carries setRows: [{ reps, weight }]. weight === null = bodyweight.
+// Older logs stored a single sets/reps/weight triple — normalizeLift expands
+// those into uniform rows so every consumer sees the same shape.
+function makeSetRows(sets, reps, weight){
+  const n = Math.max(1, Math.round(sets) || 1);
+  return Array.from({ length: n }, () => ({ reps: reps ?? null, weight: weight ?? null }));
+}
+function liftDerived(setRows){
+  const rows = Array.isArray(setRows) ? setRows : [];
+  let volume = 0, e1rm = null, totalReps = 0, anyWeight = false;
+  for (const r of rows){
+    const reps = +r.reps || 0;
+    const w = r.weight == null ? null : +r.weight;
+    totalReps += reps;
+    if (w != null){
+      anyWeight = true;
+      volume += reps * w;
+      if (reps){ const e = Math.round(w * (1 + reps / 30)); if (e1rm == null || e > e1rm) e1rm = e; }
+    }
+  }
+  return { volume, e1rm, totalReps, anyWeight, sets: rows.length };
+}
+function normalizeLift(t){
+  if (!t || t.kind !== 'lift') return t;
+  const rows = (Array.isArray(t.setRows) && t.setRows.length)
+    ? t.setRows.map(r => ({ reps: r.reps ?? null, weight: r.weight ?? null }))
+    : makeSetRows(t.sets, t.reps, t.weight);
+  const d = liftDerived(rows);
+  // drop legacy scalar fields so the shape stays clean going forward
+  const { sets, reps, weight, ...rest } = t;
+  return { ...rest, setRows: rows, e1rm: d.e1rm, volume: d.volume };
+}
+
+// ── saved workouts (user-curated templates) ─────────────────────────
+function loadWorkouts(){
+  try { const w = JSON.parse(localStorage.getItem(WORKOUTS_KEY)); if (Array.isArray(w)) return w; } catch (e) {}
+  return [];
+}
+function saveWorkouts(list){ localStorage.setItem(WORKOUTS_KEY, JSON.stringify(list || [])); }
 
 // date helpers (honor a debug override so rollover can be simulated)
 function todayDate(){
@@ -739,7 +776,9 @@ function computeTotals(foodLog, trainLog, sleep){
 function buildSession(dKey, trainLog){
   const ex = (trainLog || []).filter(t => t.kind === 'lift' || t.kind === 'cardio').map(t =>
     t.kind === 'lift'
-      ? { kind: 'lift', name: t.name, sets: t.sets ?? null, reps: t.reps ?? null, weight: t.weight ?? null }
+      ? { kind: 'lift', name: t.name,
+          setRows: (t.setRows && t.setRows.length ? t.setRows : makeSetRows(t.sets, t.reps, t.weight))
+            .map(r => ({ reps: r.reps ?? null, weight: r.weight ?? null })) }
       : { kind: 'cardio', name: t.name, mins: t.mins ?? null, dist: t.dist ?? null, distUnit: t.distUnit ?? null });
   if (!ex.length) return null;
   return { id: 'sess_' + dKey, date: dKey, day: dowShort(dKey).toUpperCase(),
@@ -842,4 +881,5 @@ const RECENT_SESSIONS = [
 ];
 
 export { parseFood, parseWorkout, HISTORY, GOALS, FOOD_DB, LIFT_NAMES, CARDIO_NAMES, titleCase, RECENT_SESSIONS, makeCardio, fmtMins,
-  reconcileHistory, recentSessions, computeInsight, computeTotals, loadHistory, dateKey, EMPTY_WORKING };
+  reconcileHistory, recentSessions, computeInsight, computeTotals, loadHistory, dateKey, EMPTY_WORKING,
+  makeSetRows, liftDerived, normalizeLift, loadWorkouts, saveWorkouts };

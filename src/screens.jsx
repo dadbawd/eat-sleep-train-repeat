@@ -4,6 +4,7 @@ import { Chevron, Screen, Sparkline, LoopGlyph, fmt, fmtDuration, fmtClock, useR
 import {
   parseFood, parseWorkout, FOOD_DB, LIFT_NAMES, CARDIO_NAMES,
   titleCase, makeCardio, fmtMins, computeInsight,
+  makeSetRows, liftDerived, loadWorkouts, saveWorkouts,
 } from './data.js';
 import { aiComplete, aiAvailable } from './ai.js';
 
@@ -208,16 +209,17 @@ async function aiParseWorkout(text, sessions){
   return JSON.parse(m[0]);
 }
 
-// build a lift/cardio log item from sets/reps/weight (+ optional notes)
+// build a lift log item from sets/reps/weight (+ optional notes) → per-set rows
 function makeLift(name, sets, reps, weight, notes){
-  const e1rm = (weight != null && reps) ? Math.round(weight * (1 + reps / 30)) : null;
-  const volume = (weight != null && sets && reps) ? sets * reps * weight : (sets && reps) ? sets * reps : 0;
-  const detail = [
-    (sets && reps) ? `${sets} × ${reps}` : reps ? `${reps} reps` : sets ? `${sets} sets` : '',
-    weight != null ? `${weight} lb` : '',
-    notes || '',
-  ].filter(Boolean).join('  ·  ');
-  return { kind: 'lift', name, sets, reps, weight, e1rm, volume, detail, note: notes || '' };
+  return liftFromRows(name, makeSetRows(sets, reps, weight), notes);
+}
+// build a lift log item directly from explicit set rows (used for re-logging)
+function liftFromRows(name, setRows, notes){
+  const rows = (setRows && setRows.length)
+    ? setRows.map(r => ({ reps: r.reps ?? null, weight: r.weight ?? null }))
+    : makeSetRows(null, null, null);
+  const d = liftDerived(rows);
+  return { kind: 'lift', name, setRows: rows, e1rm: d.e1rm, volume: d.volume, note: notes || '' };
 }
 
 // ── EAT ──────────────────────────────────────────────────────────────
@@ -361,12 +363,17 @@ function EatScreen({ onBack, foodLog, setFoodLog }) {
 }
 
 // ── TRAIN ────────────────────────────────────────────────────────────
+// "1 exercise ↻" / "5 exercises ↻"
+const exCount = n => `${n} exercise${n === 1 ? '' : 's'} ↻`;
 let _tid = 0;
 function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [matched, setMatched] = useState(null);   // {label, session} repeat suggestion
   const [flashIds, setFlashIds] = useState(() => new Set());  // rows logged this visit
+  const [workouts, setWorkouts] = useState(() => loadWorkouts());  // saved templates
+  const [saving, setSaving] = useState(false);     // save-as-workout name entry open
+  const [wkName, setWkName] = useState('');
   const lifts = trainLog.filter(t => t.kind === 'lift').length;
   const cardio = trainLog.filter(t => t.kind === 'cardio').length;
   const volume = useRollUp(trainLog.reduce((s, t) => s + (t.volume || 0), 0));
@@ -377,17 +384,35 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
     setTrainLog(prev => [...stamped, ...prev]);
   };
 
-  // log a whole saved session's exercises in one tap (lifts + cardio)
+  // log a whole saved session's exercises in one tap (lifts + cardio).
+  // Lifts re-log with their saved per-set rows pre-filled and ready to edit.
   const logSession = sess => {
     addItems(sess.exercises.map(e => e.kind === 'cardio'
       ? makeCardio(e.name, e.mins ?? null, e.dist ?? null, e.distUnit ?? null)
-      : makeLift(e.name, e.sets ?? null, e.reps ?? null, e.weight ?? null, '')));
+      : liftFromRows(e.name, e.setRows && e.setRows.length ? e.setRows : makeSetRows(e.sets, e.reps, e.weight), '')));
     setMatched(null);
   };
   const findSession = label => {
     const low = (label || '').toLowerCase();
-    return sessions.find(s => low.includes(s.label.toLowerCase()) || low.includes(s.day.toLowerCase())) || null;
+    const pool = [...workouts, ...sessions];
+    return pool.find(s => low.includes(s.label.toLowerCase()) || (s.day && low.includes(s.day.toLowerCase()))) || null;
   };
+
+  // ── saved workouts: persist the current log as a reusable template ──
+  const persistWorkouts = list => { setWorkouts(list); saveWorkouts(list); };
+  const saveCurrentWorkout = () => {
+    const exercises = trainLog
+      .filter(t => t.kind === 'lift' || t.kind === 'cardio')
+      .slice().reverse()   // store in the order they were performed
+      .map(t => t.kind === 'lift'
+        ? { kind: 'lift', name: t.name, setRows: (t.setRows || []).map(r => ({ reps: r.reps ?? null, weight: r.weight ?? null })) }
+        : { kind: 'cardio', name: t.name, mins: t.mins ?? null, dist: t.dist ?? null, distUnit: t.distUnit ?? null });
+    if (!exercises.length) return;
+    const label = wkName.trim() || `Workout ${workouts.length + 1}`;
+    persistWorkouts([{ id: `wk_${Date.now()}`, label, exercises }, ...workouts]);
+    setSaving(false); setWkName('');
+  };
+  const deleteWorkout = id => persistWorkouts(workouts.filter(w => w.id !== id));
 
   // map an AI exercise → a log item
   const aiToItem = e => {
@@ -413,7 +438,7 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
   const runAI = async raw => {
     if (!aiAvailable()) { const r = parseWorkout(raw); addItems(r.items); return; }
     setLoading(true);
-    try { handleAI(await aiParseWorkout(raw, sessions)); }
+    try { handleAI(await aiParseWorkout(raw, [...workouts, ...sessions])); }
     catch (e) { const r = parseWorkout(raw); addItems(r.items); }
     finally { setLoading(false); }
   };
@@ -429,19 +454,26 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
     runAI(raw);
   };
 
-  const recompute = t => {
-    const { sets, reps, weight } = t;
-    const e1rm = (weight != null && reps) ? Math.round(weight * (1 + reps / 30)) : null;
-    const volume = (weight != null && sets && reps) ? sets * reps * weight : (sets && reps) ? sets * reps : 0;
-    const detail = [
-      (sets && reps) ? `${sets} × ${reps}` : reps ? `${reps} reps` : sets ? `${sets} sets` : '',
-      weight != null ? `${weight} lb` : '',
-    ].filter(Boolean).join('  @  ');
-    return { ...t, e1rm, volume, detail };
-  };
+  const recomputeLift = t => { const d = liftDerived(t.setRows); return { ...t, e1rm: d.e1rm, volume: d.volume }; };
   const numVal = v => v === '' ? null : Math.max(0, Math.round(+v) || 0);
   const numValF = v => v === '' ? null : Math.max(0, parseFloat(v) || 0);
-  const patchLift = (id, key, val) => setTrainLog(prev => prev.map(t => t.id === id ? recompute({ ...t, [key]: val }) : t));
+  // edit one set's reps or weight
+  const patchSet = (id, idx, key, val) => setTrainLog(prev => prev.map(t => {
+    if (t.id !== id) return t;
+    const setRows = t.setRows.map((r, i) => i === idx ? { ...r, [key]: val } : r);
+    return recomputeLift({ ...t, setRows });
+  }));
+  // add a set (copies the last set's reps/weight as a starting point)
+  const addSet = id => setTrainLog(prev => prev.map(t => {
+    if (t.id !== id) return t;
+    const last = t.setRows[t.setRows.length - 1] || { reps: null, weight: null };
+    return recomputeLift({ ...t, setRows: [...t.setRows, { reps: last.reps, weight: last.weight }] });
+  }));
+  // remove a single set (keep at least one row; use REMOVE to delete the lift)
+  const removeSet = (id, idx) => setTrainLog(prev => prev.map(t => {
+    if (t.id !== id || t.setRows.length <= 1) return t;
+    return recomputeLift({ ...t, setRows: t.setRows.filter((_, i) => i !== idx) });
+  }));
   const patchCardio = (id, key, val) => setTrainLog(prev => prev.map(t => {
     if (t.id !== id) return t;
     const next = { ...t, [key]: val };
@@ -484,22 +516,42 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
         )}
         {trainLog.length === 0 && !loading && (
           <div className="recent">
-            {sessions.length > 0 ? (
+            {workouts.length > 0 && (
               <>
-                <div className="recent-head">REPEAT A RECENT SESSION</div>
+                <div className="recent-head">SAVED WORKOUTS</div>
+                {workouts.map(w => (
+                  <div key={w.id} className="recent-chip saved" onClick={() => logSession(w)}>
+                    <span className="rc-main">
+                      <span className="rc-day saved">★</span>
+                      <span className="rc-label">{w.label}</span>
+                    </span>
+                    <span className="rc-tail">
+                      <span className="rc-meta">{exCount(w.exercises.length)}</span>
+                      <button className="rc-del" title="Delete workout"
+                        onClick={e => { e.stopPropagation(); deleteWorkout(w.id); }}>✕</button>
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+            {sessions.length > 0 && (
+              <>
+                <div className="recent-head" style={{ marginTop: workouts.length ? 22 : 0 }}>REPEAT A RECENT SESSION</div>
                 {sessions.map(s => (
                   <button key={s.id} className="recent-chip" onClick={() => logSession(s)}>
                     <span className="rc-main">
                       <span className="rc-day">{s.day}</span>
                       <span className="rc-label">{s.label}</span>
                     </span>
-                    <span className="rc-meta">{s.exercises.length} exercises ↻</span>
+                    <span className="rc-meta">{exCount(s.exercises.length)}</span>
                   </button>
                 ))}
-                <div className="recent-hint">…or just type it: “incline bench 3x10 at 150”, “ran 30 min”</div>
               </>
+            )}
+            {workouts.length === 0 && sessions.length === 0 ? (
+              <div className="empty">Type your sets and they log clean.<br />Save a session as a workout to repeat it in one tap.</div>
             ) : (
-              <div className="empty">Type your sets and they log clean.<br />Your past sessions show up here to repeat in one tap.</div>
+              <div className="recent-hint">…or just type it: “incline bench 3x10 at 150”, “ran 30 min”</div>
             )}
           </div>
         )}
@@ -510,51 +562,54 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
                 <span className="lift-name">{t.name}</span>
                 <button className="lift-done" onClick={() => setEditId(null)}>DONE</button>
               </div>
-              <div className="lift-metrics edit">
-                <label className="lm le">
-                  <input inputMode="numeric" value={t.sets ?? ''} placeholder="–"
-                    onChange={e => patchLift(t.id, 'sets', numVal(e.target.value))} />
-                  <i>SETS</i>
-                </label>
-                <label className="lm le">
-                  <input inputMode="numeric" value={t.reps ?? ''} placeholder="–"
-                    onChange={e => patchLift(t.id, 'reps', numVal(e.target.value))} />
-                  <i>REPS</i>
-                </label>
-                <label className="lm le">
-                  <input inputMode="numeric" value={t.weight ?? ''} placeholder="BW"
-                    onChange={e => patchLift(t.id, 'weight', numVal(e.target.value))} />
-                  <i>LOAD · LB</i>
-                </label>
-              </div>
-              <button className="row-remove" onClick={() => removeEntry(t.id)}>REMOVE</button>
+              <div className="setedit-head"><span>SET</span><span>REPS</span><span>LOAD · LB</span><span /></div>
+              {t.setRows.map((r, i) => (
+                <div className="setedit-row" key={i}>
+                  <span className="set-n">{i + 1}</span>
+                  <input className="set-in" inputMode="numeric" value={r.reps ?? ''} placeholder="–"
+                    onChange={e => patchSet(t.id, i, 'reps', numVal(e.target.value))} />
+                  <input className="set-in" inputMode="numeric" value={r.weight ?? ''} placeholder="BW"
+                    onChange={e => patchSet(t.id, i, 'weight', numVal(e.target.value))} />
+                  <button className="set-del" title="Remove set" disabled={t.setRows.length <= 1}
+                    onClick={() => removeSet(t.id, i)}>✕</button>
+                </div>
+              ))}
+              <button className="add-set" onClick={() => addSet(t.id)}>+ ADD SET</button>
+              <button className="row-remove" onClick={() => removeEntry(t.id)}>REMOVE EXERCISE</button>
             </div>
           ) : (
+            (() => {
+              const d = liftDerived(t.setRows);
+              // highlight the single best (heaviest est-1RM) working set, when it's a clear winner
+              const e1rms = t.setRows.map(r => (r.weight != null && r.reps) ? Math.round(r.weight * (1 + r.reps / 30)) : -1);
+              const best = Math.max(...e1rms);
+              const bestIdx = (best > 0 && e1rms.filter(x => x === best).length === 1) ? e1rms.indexOf(best) : -1;
+              return (
             <div key={t.id} className={'liftcard tappable pop' + (flashIds.has(t.id) ? ' flash' : '')} onClick={() => setEditId(t.id)} title="Tap to edit">
               <div className="lift-top">
                 <span className="lift-name">{t.name}</span>
-                {t.weight != null && t.volume
-                  ? <span className="lift-vol">{fmt(t.volume)} <i>lb vol</i></span>
-                  : (t.sets && t.reps)
-                    ? <span className="lift-vol">{t.sets * t.reps} <i>total reps</i></span>
-                    : null}
+                {d.anyWeight && d.volume
+                  ? <span className="lift-stat"><b>{fmt(d.volume)}</b><i>lb vol</i></span>
+                  : d.totalReps
+                    ? <span className="lift-stat"><b>{d.totalReps}</b><i>reps</i></span>
+                    : <span className="lift-stat ghost"><i>logged</i></span>}
               </div>
-              <div className="lift-metrics">
-                <div className="lm">
-                  <b>{t.sets && t.reps ? `${t.sets}×${t.reps}` : t.reps ? t.reps : t.sets ? t.sets : '—'}</b>
-                  <i>{t.sets && t.reps ? 'SETS × REPS' : t.reps ? 'REPS' : 'SETS'}</i>
-                </div>
-                <div className="lm">
-                  <b>{t.weight != null ? t.weight : 'BW'}{t.weight != null ? <u>lb</u> : null}</b>
-                  <i>LOAD</i>
-                </div>
-                <div className="lm accent">
-                  <b>{t.e1rm != null ? t.e1rm : '—'}{t.e1rm != null ? <u>lb</u> : null}</b>
-                  <i>EST 1RM</i>
-                </div>
+              <div className="setlist">
+                {t.setRows.map((r, i) => (
+                  <div className={'setrow' + (i === bestIdx ? ' top' : '')} key={i}>
+                    <span className="set-n">{i + 1}</span>
+                    <span className="set-cell"><b>{r.reps ?? '—'}</b><u>reps</u></span>
+                    <span className="set-x">×</span>
+                    <span className="set-cell">{r.weight != null ? <><b>{r.weight}</b><u>lb</u></> : <b className="bw">BW</b>}</span>
+                    {i === bestIdx ? <span className="set-flag">PR-ish</span> : null}
+                  </div>
+                ))}
               </div>
+              {d.e1rm != null ? <div className="lift-foot"><span>EST 1RM</span><b>{d.e1rm}<u>lb</u></b></div> : null}
               {t.note ? <div className="lift-note">{t.note}</div> : null}
             </div>
+              );
+            })()
           )
         ) : t.kind === 'cardio' ? (
           editId === t.id ? (
@@ -612,6 +667,20 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
               : <div className="logitem-detail">{t.detail}</div>}
           </div>
         ))}
+
+        {(lifts + cardio) > 0 && (
+          saving ? (
+            <div className="savebar pop">
+              <input className="save-in" autoFocus value={wkName} placeholder="Name this workout…"
+                onChange={e => setWkName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveCurrentWorkout(); if (e.key === 'Escape') { setSaving(false); setWkName(''); } }} />
+              <button className="save-go" onClick={saveCurrentWorkout}>SAVE</button>
+              <button className="save-x" onClick={() => { setSaving(false); setWkName(''); }}>✕</button>
+            </div>
+          ) : (
+            <button className="save-workout" onClick={() => setSaving(true)}>★ SAVE AS WORKOUT</button>
+          )
+        )}
       </div>
     </Screen>
   );
