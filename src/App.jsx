@@ -5,10 +5,12 @@ import { EatScreen, SleepScreen, TrainScreen, RepeatScreen } from './screens.jsx
 import { reconcileHistory, EMPTY_WORKING, computeTotals, recentSessions, normalizeLift } from './data.js';
 
 const PILLAR_ICONS = {
-  eat: '/pillar-icons/eat-icon.png',
-  sleep: '/pillar-icons/sleep-icon.png',
-  train: '/pillar-icons/train-icon.png',
+  eat: `${import.meta.env.BASE_URL}pillar-icons/eat-icon.png`,
+  sleep: `${import.meta.env.BASE_URL}pillar-icons/sleep-icon.png`,
+  train: `${import.meta.env.BASE_URL}pillar-icons/train-icon.png`,
 };
+
+const BRAND_LOGO = `${import.meta.env.BASE_URL}brand/estr-logo.png`;
 
 function StatusDot({ on, hue }) {
   return <span className={'sdot' + (on ? ' on' : '')} style={on && hue ? { background: hue, boxShadow: `0 0 9px ${hue}` } : undefined} />;
@@ -55,7 +57,7 @@ function Home({ go, foodLog, trainLog, sleep, today, btnStyle, hues, history }) 
   return (
     <div className="home">
       <div className="home-head">
-        <img className="brand-logo" src="/brand/estr-logo.png" alt="ESTR" width="120" height="30" draggable="false" />
+        <img className="brand-logo" src={BRAND_LOGO} alt="ESTR" width="120" height="30" draggable="false" />
         <button className="datebtn" type="button" onClick={() => go('repeat')} aria-label="Open date history">
           <span className="datebtn-icon" aria-hidden="true" />
           <span>{dateStr}</span>
