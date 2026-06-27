@@ -380,14 +380,33 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
   const [workouts, setWorkouts] = useState(() => loadWorkouts());  // saved templates
   const [saving, setSaving] = useState(false);     // save-as-workout name entry open
   const [wkName, setWkName] = useState('');
+  const [savedMsg, setSavedMsg] = useState(null);  // brief "saved ✓" confirmation label
+  useEffect(() => {
+    if (!savedMsg) return;
+    const id = setTimeout(() => setSavedMsg(null), 2600);
+    return () => clearTimeout(id);
+  }, [savedMsg]);
+  const [view, setView] = useState('home');        // 'home' launcher · 'new' build · 'run' checklist
+  const [activeName, setActiveName] = useState(null); // workout name shown atop the build session
+  const [run, setRun] = useState(null);            // active saved-workout checklist runtime
+  const [sessionIds, setSessionIds] = useState(() => new Set()); // entries added in the current New Workout
   const lifts = trainLog.filter(t => t.kind === 'lift').length;
   const cardio = trainLog.filter(t => t.kind === 'cardio').length;
   const volume = useRollUp(trainLog.reduce((s, t) => s + (t.volume || 0), 0));
 
+  // the New Workout session = only the entries logged since "+ New Workout" was tapped,
+  // so saving captures just this workout while today's stats keep accumulating.
+  const sessionEntries = trainLog.filter(t => sessionIds.has(t.id));
+  const sLifts = sessionEntries.filter(t => t.kind === 'lift').length;
+  const sCardio = sessionEntries.filter(t => t.kind === 'cardio').length;
+  const sVolume = sessionEntries.reduce((s, t) => s + (t.volume || 0), 0);
+
+  // entries logged while building a New Workout join that session (checklist finishes don't)
   const addItems = items => {
     const stamped = items.map(it => ({ ...it, id: `${Date.now()}_${++_tid}` }));
     setFlashIds(prev => new Set([...prev, ...stamped.map(s => s.id)]));
     setTrainLog(prev => [...stamped, ...prev]);
+    if (view === 'new') setSessionIds(prev => new Set([...prev, ...stamped.map(s => s.id)]));
   };
 
   // log a whole saved session's exercises in one tap (lifts + cardio).
@@ -407,7 +426,7 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
   // ── saved workouts: persist the current log as a reusable template ──
   const persistWorkouts = list => { setWorkouts(list); saveWorkouts(list); };
   const saveCurrentWorkout = () => {
-    const exercises = trainLog
+    const exercises = sessionEntries
       .filter(t => t.kind === 'lift' || t.kind === 'cardio')
       .slice().reverse()   // store in the order they were performed
       .map(t => t.kind === 'lift'
@@ -417,6 +436,8 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
     const label = wkName.trim() || `Workout ${workouts.length + 1}`;
     persistWorkouts([{ id: `wk_${Date.now()}`, label, exercises }, ...workouts]);
     setSaving(false); setWkName('');
+    setSavedMsg(label);
+    setActiveName(label);
   };
   const deleteWorkout = id => persistWorkouts(workouts.filter(w => w.id !== id));
 
@@ -487,81 +508,50 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
   }));
   const removeEntry = id => { setTrainLog(prev => prev.filter(t => t.id !== id)); setEditId(null); };
 
-  return (
-    <Screen title="TRAIN" onBack={onBack}>
-      <div className="totalrow">
-        <div className="totalmetric">
-          <div className="bignum">{lifts + cardio}</div>
-          <div className="metriclabel">MOVEMENTS</div>
-        </div>
-        <div className="totalmetric">
-          <div className="bignum">{volume ? fmt(volume) : '—'}<span className="unit">{volume ? 'lb' : ''}</span></div>
-          <div className="metriclabel">VOLUME</div>
-        </div>
-      </div>
+  // ── guided checklist: run a saved workout, ticking off sets ──────────
+  const startRun = w => {
+    setRun({
+      id: w.id,
+      label: w.label,
+      exercises: w.exercises.map(e => e.kind === 'cardio'
+        ? { kind: 'cardio', name: e.name, mins: e.mins ?? null, dist: e.dist ?? null, distUnit: e.distUnit ?? null, done: false }
+        : {
+            kind: 'lift', name: e.name,
+            setRows: (e.setRows && e.setRows.length ? e.setRows : makeSetRows(e.sets, e.reps, e.weight))
+              .map(r => ({ reps: r.reps ?? null, weight: r.weight ?? null, done: false })),
+          }),
+    });
+    setView('run');
+  };
+  const toggleSet = (ei, si) => setRun(r => ({ ...r, exercises: r.exercises.map((e, i) =>
+    i !== ei ? e : { ...e, setRows: e.setRows.map((row, j) => j !== si ? row : { ...row, done: !row.done }) }) }));
+  const patchRunSet = (ei, si, key, val) => setRun(r => ({ ...r, exercises: r.exercises.map((e, i) =>
+    i !== ei ? e : { ...e, setRows: e.setRows.map((row, j) => j !== si ? row : { ...row, [key]: val }) }) }));
+  const toggleCardio = ei => setRun(r => ({ ...r, exercises: r.exercises.map((e, i) =>
+    i !== ei ? e : { ...e, done: !e.done }) }));
+  const runCounts = run ? run.exercises.reduce((a, e) => {
+    if (e.kind === 'lift') { a.total += e.setRows.length; a.done += e.setRows.filter(s => s.done).length; }
+    else { a.total += 1; a.done += e.done ? 1 : 0; }
+    return a;
+  }, { total: 0, done: 0 }) : { total: 0, done: 0 };
+  const finishRun = () => {
+    const items = [];
+    run.exercises.forEach(e => {
+      if (e.kind === 'lift') {
+        const rows = e.setRows.filter(s => s.done).map(s => ({ reps: s.reps ?? null, weight: s.weight ?? null }));
+        if (rows.length) items.push(liftFromRows(e.name, rows, ''));
+      } else if (e.done) {
+        items.push(makeCardio(e.name, e.mins, e.dist, e.distUnit));
+      }
+    });
+    if (items.length) addItems(items);
+    setRun(null); setView('home');
+  };
+  const cancelRun = () => { setRun(null); setView('home'); };
+  const backToHome = () => { setView('home'); setActiveName(null); };
 
-      <LazyInput placeholder={['bench 3x5 at 185…', 'ran 3 miles in 25 min…', 'squat 5x5 315…', 'bike 45 min…']} autoFocus onSubmit={submit} suggest={exerciseSuggest} />
-
-      {matched && (
-        <div className="matched pop">
-          <div className="matched-label"><span className="ai-dot" />{matched.label}</div>
-          {matched.session && (
-            <button className="matched-btn" onClick={() => logSession(matched.session)}>
-              Re-log all {matched.session.exercises.length}
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="loglist">
-        {loading && (
-          <div className="logitem ai-row">
-            <div className="logitem-name"><span className="ai-dot" />Reading…</div>
-            <div className="logitem-detail">· · ·</div>
-          </div>
-        )}
-        {trainLog.length === 0 && !loading && (
-          <div className="recent">
-            {workouts.length > 0 && (
-              <>
-                <div className="recent-head">SAVED WORKOUTS</div>
-                {workouts.map(w => (
-                  <div key={w.id} className="recent-chip saved" onClick={() => logSession(w)}>
-                    <span className="rc-main">
-                      <span className="rc-day saved">★</span>
-                      <span className="rc-label">{w.label}</span>
-                    </span>
-                    <span className="rc-tail">
-                      <span className="rc-meta">{exCount(w.exercises.length)}</span>
-                      <button className="rc-del" title="Delete workout"
-                        onClick={e => { e.stopPropagation(); deleteWorkout(w.id); }}>✕</button>
-                    </span>
-                  </div>
-                ))}
-              </>
-            )}
-            {sessions.length > 0 && (
-              <>
-                <div className="recent-head" style={{ marginTop: workouts.length ? 22 : 0 }}>REPEAT A RECENT SESSION</div>
-                {sessions.map(s => (
-                  <button key={s.id} className="recent-chip" onClick={() => logSession(s)}>
-                    <span className="rc-main">
-                      <span className="rc-day">{s.day}</span>
-                      <span className="rc-label">{s.label}</span>
-                    </span>
-                    <span className="rc-meta">{exCount(s.exercises.length)}</span>
-                  </button>
-                ))}
-              </>
-            )}
-            {workouts.length === 0 && sessions.length === 0 ? (
-              <div className="empty">Type your sets and they log clean.<br />Save a session as a workout to repeat it in one tap.</div>
-            ) : (
-              <div className="recent-hint">…or just type it: “incline bench 3x10 at 150”, “ran 30 min”</div>
-            )}
-          </div>
-        )}
-        {trainLog.map(t => t.kind === 'lift' ? (
+  // this session's logged movements, rendered as editable cards (the build view)
+  const logList = sessionEntries.map(t => t.kind === 'lift' ? (
           editId === t.id ? (
             <div key={t.id} className="liftcard editing">
               <div className="lift-top">
@@ -672,20 +662,143 @@ function TrainScreen({ onBack, trainLog, setTrainLog, sessions = [] }) {
               ? <button className="inline-remove" onClick={e => { e.stopPropagation(); removeEntry(t.id); }}>REMOVE</button>
               : <div className="logitem-detail">{t.detail}</div>}
           </div>
-        ))}
+        ));
 
-        {(lifts + cardio) > 0 && (
-          saving ? (
-            <div className="savebar pop">
-              <input className="save-in" autoFocus value={wkName} placeholder="Name this workout…"
-                onChange={e => setWkName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') saveCurrentWorkout(); if (e.key === 'Escape') { setSaving(false); setWkName(''); } }} />
-              <button className="save-go" onClick={saveCurrentWorkout}>SAVE</button>
-              <button className="save-x" onClick={() => { setSaving(false); setWkName(''); }}>✕</button>
+  const savebar = sessionEntries.length > 0 ? (
+    saving ? (
+      <div className="savebar pop">
+        <input className="save-in" autoFocus value={wkName} placeholder="Name this workout…"
+          onChange={e => setWkName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') saveCurrentWorkout(); if (e.key === 'Escape') { setSaving(false); setWkName(''); } }} />
+        <button className="save-go" onClick={saveCurrentWorkout}>SAVE</button>
+        <button className="save-x" onClick={() => { setSaving(false); setWkName(''); }}>✕</button>
+      </div>
+    ) : savedMsg ? (
+      <div className="save-confirm pop">✓ Saved “{savedMsg}” — find it under Saved Workouts</div>
+    ) : (
+      <button className="save-workout" onClick={() => setSaving(true)}>★ SAVE AS WORKOUT</button>
+    )
+  ) : null;
+
+  const makeTotalsRow = (n, vol) => (
+    <div className="totalrow">
+      <div className="totalmetric">
+        <div className="bignum">{n}</div>
+        <div className="metriclabel">MOVEMENTS</div>
+      </div>
+      <div className="totalmetric">
+        <div className="bignum">{vol ? fmt(vol) : '—'}<span className="unit">{vol ? 'lb' : ''}</span></div>
+        <div className="metriclabel">VOLUME</div>
+      </div>
+    </div>
+  );
+
+  // ── Run a saved workout: guided checklist ───────────────────────────
+  if (view === 'run' && run) {
+    return (
+      <Screen title={run.label} onBack={cancelRun}>
+        <div className="runbar">
+          <div className="run-progress"><b>{runCounts.done}</b> / {runCounts.total} sets done</div>
+          <button className="run-finish" disabled={runCounts.done === 0} onClick={finishRun}>FINISH ✓</button>
+        </div>
+        <div className="loglist">
+          {run.exercises.map((e, ei) => e.kind === 'lift' ? (
+            <div key={ei} className="liftcard">
+              <div className="lift-top">
+                <span className="lift-name">{e.name}</span>
+                <span className="lift-stat ghost"><b>{e.setRows.filter(s => s.done).length}</b><i>/ {e.setRows.length} sets</i></span>
+              </div>
+              <div className="runsets">
+                {e.setRows.map((r, si) => (
+                  <div key={si} className={'runset' + (r.done ? ' done' : '')}>
+                    <button className="rs-check" onClick={() => toggleSet(ei, si)} aria-label="Mark set done">{r.done ? '✓' : ''}</button>
+                    <span className="rs-n">{si + 1}</span>
+                    <input className="set-in" inputMode="numeric" value={r.reps ?? ''} placeholder="–"
+                      onChange={ev => patchRunSet(ei, si, 'reps', numVal(ev.target.value))} />
+                    <span className="set-x">×</span>
+                    <input className="set-in" inputMode="numeric" value={r.weight ?? ''} placeholder="BW"
+                      onChange={ev => patchRunSet(ei, si, 'weight', numVal(ev.target.value))} />
+                    <span className="rs-unit">lb</span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
-            <button className="save-workout" onClick={() => setSaving(true)}>★ SAVE AS WORKOUT</button>
-          )
+            <div key={ei} className="liftcard">
+              <div className="lift-top">
+                <span className="lift-name">{e.name}</span>
+                <span className="kindtag cardio">cardio</span>
+              </div>
+              <div className={'runset cardio' + (e.done ? ' done' : '')}>
+                <button className="rs-check" onClick={() => toggleCardio(ei)} aria-label="Mark cardio done">{e.done ? '✓' : ''}</button>
+                <span className="rs-cardio">{[e.mins != null ? fmtMins(e.mins) : '', e.dist != null ? `${e.dist} ${e.distUnit || 'mi'}` : ''].filter(Boolean).join('  ·  ') || 'tap when done'}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Screen>
+    );
+  }
+
+  // ── Build a new workout by typing (natural-language / AI parsing) ────
+  if (view === 'new') {
+    return (
+      <Screen title={activeName || 'New Workout'} onBack={backToHome}>
+        {makeTotalsRow(sLifts + sCardio, sVolume)}
+        <LazyInput placeholder={['bench 3x5 at 185…', 'ran 3 miles in 25 min…', 'squat 5x5 315…', 'bike 45 min…']} autoFocus onSubmit={submit} suggest={exerciseSuggest} />
+        {matched && (
+          <div className="matched pop">
+            <div className="matched-label"><span className="ai-dot" />{matched.label}</div>
+            {matched.session && (
+              <button className="matched-btn" onClick={() => logSession(matched.session)}>
+                Re-log all {matched.session.exercises.length}
+              </button>
+            )}
+          </div>
+        )}
+        <div className="loglist">
+          {loading && (
+            <div className="logitem ai-row">
+              <div className="logitem-name"><span className="ai-dot" />Reading…</div>
+              <div className="logitem-detail">· · ·</div>
+            </div>
+          )}
+          {sessionEntries.length === 0 && !loading && (
+            <div className="empty">Type your sets and they log clean.<br />e.g. “incline bench 3x10 at 150”, “ran 30 min”.</div>
+          )}
+          {logList}
+          {savebar}
+        </div>
+      </Screen>
+    );
+  }
+
+  // ── Home launcher: New Workout · Saved Workouts ─────────────────────
+  return (
+    <Screen title="TRAIN" onBack={onBack}>
+      {makeTotalsRow(lifts + cardio, volume)}
+      <button className="train-new" onClick={() => { setActiveName(null); setSessionIds(new Set()); setView('new'); }}>+  NEW WORKOUT</button>
+      <div className="loglist">
+        {workouts.length > 0 && (
+          <div className="recent">
+            <div className="recent-head">SAVED WORKOUTS</div>
+            {workouts.map(w => (
+              <div key={w.id} className="recent-chip saved" onClick={() => startRun(w)}>
+                <span className="rc-main">
+                  <span className="rc-day saved">★</span>
+                  <span className="rc-label">{w.label}</span>
+                </span>
+                <span className="rc-tail">
+                  <span className="rc-meta">{exCount(w.exercises.length)}</span>
+                  <button className="rc-del" title="Delete workout"
+                    onClick={e => { e.stopPropagation(); deleteWorkout(w.id); }}>✕</button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {workouts.length === 0 && (
+          <div className="empty">No saved workouts yet.<br />Start a new workout, then save it to reuse in one tap.</div>
         )}
       </div>
     </Screen>

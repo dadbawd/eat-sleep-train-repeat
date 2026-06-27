@@ -680,15 +680,6 @@ function parseWorkout(raw){
 
 // ── 7-day canned history (today filled live by the app) ─────────────
 // kcal, protein (g), sleep (hrs), train (relative volume 0–100)
-const HISTORY = [
-  { day: 'Thu', kcal: 2180, protein: 142, sleep: 6.5, train: 72 },
-  { day: 'Fri', kcal: 2640, protein: 119, sleep: 7.8, train: 0  },
-  { day: 'Sat', kcal: 3010, protein: 138, sleep: 8.4, train: 40 },
-  { day: 'Sun', kcal: 1980, protein: 151, sleep: 7.2, train: 0  },
-  { day: 'Mon', kcal: 2240, protein: 168, sleep: 6.1, train: 88 },
-  { day: 'Tue', kcal: 2390, protein: 155, sleep: 7.6, train: 64 },
-];
-
 const GOALS = { kcal: 2400, protein: 170 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -855,31 +846,6 @@ if (typeof window !== 'undefined'){
   window.EST_clearSim = () => { localStorage.removeItem('est-debug-today'); location.reload(); };
 }
 
-// Recent named workout sessions — context for AI repeat-matching + one-tap re-log
-const RECENT_SESSIONS = [
-  { id: 's1', label: 'Push Day', day: 'Mon', exercises: [
-    { name: 'Bench Press', sets: 4, reps: 6, weight: 185 },
-    { name: 'Incline Dumbbell Press', sets: 3, reps: 10, weight: 60 },
-    { name: 'Overhead Press', sets: 3, reps: 8, weight: 95 },
-    { name: 'Lateral Raise', sets: 3, reps: 15, weight: 20 },
-    { name: 'Tricep Pushdown', sets: 3, reps: 12, weight: 50 },
-  ] },
-  { id: 's2', label: 'Leg Day', day: 'Sat', exercises: [
-    { name: 'Back Squat', sets: 5, reps: 5, weight: 315 },
-    { name: 'Romanian Deadlift', sets: 3, reps: 8, weight: 225 },
-    { name: 'Leg Press', sets: 3, reps: 12, weight: 360 },
-    { name: 'Lying Leg Curl', sets: 3, reps: 12, weight: 90 },
-    { name: 'Calf Raise', sets: 4, reps: 15, weight: 135 },
-  ] },
-  { id: 's3', label: 'Pull Day', day: 'Thu', exercises: [
-    { name: 'Deadlift', sets: 3, reps: 5, weight: 365 },
-    { name: 'Pull-ups', sets: 4, reps: 8, weight: null },
-    { name: 'Barbell Row', sets: 3, reps: 8, weight: 155 },
-    { name: 'Lat Pulldown', sets: 3, reps: 12, weight: 120 },
-    { name: 'Bicep Curl', sets: 3, reps: 12, weight: 30 },
-  ] },
-];
-
-export { parseFood, parseWorkout, HISTORY, GOALS, FOOD_DB, LIFT_NAMES, CARDIO_NAMES, titleCase, RECENT_SESSIONS, makeCardio, fmtMins,
+export { parseFood, parseWorkout, GOALS, FOOD_DB, LIFT_NAMES, CARDIO_NAMES, titleCase, makeCardio, fmtMins,
   reconcileHistory, recentSessions, computeInsight, computeTotals, loadHistory, dateKey, EMPTY_WORKING,
   makeSetRows, liftDerived, normalizeLift, loadWorkouts, saveWorkouts };
