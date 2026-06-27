@@ -66,7 +66,7 @@ function LazyInput({ placeholder, onSubmit, autoFocus, suggest }) {
 
   return (
     <div className="suggest-wrap">
-      <div className="inputbar" onPointerDown={focusInput} onClick={focusInput}>
+      <div className="inputbar" onPointerDown={focusInput} onTouchStart={focusInput} onClick={focusInput}>
         <input
           ref={ref}
           type="text"
