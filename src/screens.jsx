@@ -46,6 +46,9 @@ function LazyInput({ placeholder, onSubmit, autoFocus, suggest }) {
     setActive(-1);
     if (ref.current) ref.current.focus();
   };
+  const focusInput = () => {
+    if (ref.current && document.activeElement !== ref.current) ref.current.focus();
+  };
   const onKey = e => {
     if (showSug && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       e.preventDefault();
@@ -63,9 +66,11 @@ function LazyInput({ placeholder, onSubmit, autoFocus, suggest }) {
 
   return (
     <div className="suggest-wrap">
-      <div className="inputbar">
+      <div className="inputbar" onPointerDown={focusInput} onClick={focusInput}>
         <input
           ref={ref}
+          type="text"
+          inputMode="text"
           value={val}
           onChange={e => { setVal(e.target.value); setActive(-1); setFocused(true); }}
           onKeyDown={onKey}
@@ -74,6 +79,7 @@ function LazyInput({ placeholder, onSubmit, autoFocus, suggest }) {
           placeholder={phList[phIdx]}
           style={{ '--ph-o': phFade ? 0 : 1 }}
           className="lazyinput"
+          enterKeyHint="done"
           autoCapitalize="none" autoCorrect="off" spellCheck="false"
         />
         <button className={'submit' + (val.trim() ? ' on' : '')} onClick={go} aria-label="Log">
