@@ -11,10 +11,14 @@ _Prepared while you were at the gym, on branch `prep-play-store-launch`._
 abuse, debug hooks removed from production, security headers added, privacy policy
 written, **signed release `.aab` built and ready to upload.**
 
-**3 things only YOU can do** before this goes live (details below):
+**Resolved since:** production domain found (`est-repeat.pages.dev`), baked into the app,
+AAB rebuilt; privacy policy contact email set to `biosforgeio@gmail.com`.
+
+**Things only YOU can do** before this goes live (details below):
 1. Finish Google Play **identity + device verification** (needs a borrowed/cheap Android device, once).
-2. Give me your **deployed site domain** so the in-app AI works (one value + one rebuild).
-3. Fill in the **privacy policy contact email** + Play store listing assets.
+2. **Merge/deploy this branch** so the updated (CORS + hardened) backend goes live — required
+   for the in-app AI to work (see §2).
+3. Pick **Play store listing assets** (screenshots, feature graphic).
 
 ---
 
@@ -43,28 +47,30 @@ can be reset if lost. Strongly recommended.
 
 ---
 
-## 2. Make the in-app AI work — I need your deployed domain
+## 2. In-app AI — DONE (domain found + baked in)
 
-**The one thing I couldn't finish without you.** The smart food/workout parsing calls a
-backend. On the website it works (same origin). Inside the packaged app, the call has to
-point at an absolute URL, and your deployed site's domain isn't anywhere in the repo.
+✅ Found your Cloudflare Pages project (`est-repeat`) and confirmed the production URL:
+**`https://est-repeat.pages.dev`** (no custom domain set). Verified the live site and the
+`/api/complete` endpoint both respond there.
 
-**What to do:**
-1. Find your deployed site URL — it's in your Cloudflare Pages dashboard for this project
-   (looks like `https://something.pages.dev`, or your custom domain).
-2. Create `.env.production` (copy from `.env.production.example`) with:
-   ```
-   VITE_API_BASE=https://your-real-domain
-   ```
-3. Rebuild the app bundle:
-   ```
-   npm run build && npx cap sync android
-   cd android && ./gradlew bundleRelease
-   ```
+✅ Set `VITE_API_BASE=https://est-repeat.pages.dev` in `.env.production` and **rebuilt the
+signed AAB** — the app now points at the real backend.
 
-Until then the app still works fully — it just falls back to the **offline parser** instead
-of the smarter AI one. (The AI already works on the website.) Tell me the domain and I'll do
-the rebuild for you.
+### ⚠️ One dependency: deploy this branch so the app's AI actually works
+The app calls the backend **cross-origin** (from the app's `https://localhost` to
+`est-repeat.pages.dev`), which needs CORS headers. The **currently-deployed** backend (16
+days old) doesn't send them — I tested it: the preflight returns `405`, so the app's AI call
+would be blocked and fall back to the offline parser.
+
+My updated `functions/api/complete.js` (in this branch) adds that CORS handling **and** the
+abuse hardening. So the sequence is:
+
+1. Review + merge this branch to `main`.
+2. Cloudflare auto-deploys the updated backend.
+3. **Then the in-app AI works** (and the endpoint is hardened).
+
+Until deployed, the app still works fully on its offline parser — the AI just isn't active
+inside the app yet. (AI already works on the website.)
 
 ---
 
