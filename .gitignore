@@ -5,9 +5,18 @@ dist-ssr
 
 # secrets — the Claude API key lives here; never commit
 .env
+.env.production
 .DS_Store
 .vite
 dev-server*.log
+
+# Android release signing — NEVER commit the keystore or its passwords.
+# Losing upload-keystore.jks means you can't ship app updates (unless Play
+# App Signing is enabled). Back it up somewhere safe and private.
+android/keystore.properties
+android/app/upload-keystore.jks
+*.jks
+*.keystore
 
 # generated PWA icons (rebuilt by `npm run icons` on every build)
 public/icon-192.png

@@ -9,6 +9,15 @@ const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
 const MODEL = process.env.EST_MODEL || 'claude-haiku-4-5';
 const PORT = process.env.EST_AI_PORT || 8787;
 
+// Keep the model on-task no matter what prompt arrives: parsing JSON only.
+// (Mirrors the production Cloudflare function in functions/api/complete.js.)
+const SYSTEM_PROMPT =
+  'You are a strict JSON parsing engine embedded in a food and fitness tracking app. ' +
+  'You only ever output a single JSON object that satisfies the schema given in the user message. ' +
+  'You never hold a conversation, answer general questions, give advice, or write prose, code, or ' +
+  'explanations, and you never output anything other than the requested JSON. If the input is not a ' +
+  'food or workout description that can be parsed, return a minimal JSON object such as {}.';
+
 const app = express();
 app.use(express.json({ limit: '16kb' }));
 
@@ -22,6 +31,7 @@ app.post('/api/complete', async (req, res) => {
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 1024,
+      system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     });
     const text = msg.content

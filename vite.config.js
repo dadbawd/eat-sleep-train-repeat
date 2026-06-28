@@ -15,6 +15,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // emit an external registerSW.js instead of an inline <script>, so the
+      // Content-Security-Policy in index.html can forbid inline scripts
+      injectRegister: 'script',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Eat Sleep Train Repeat',

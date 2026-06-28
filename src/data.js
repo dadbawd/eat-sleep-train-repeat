@@ -840,7 +840,9 @@ function computeInsight(history, today){
 }
 
 // ── debug hooks for testing rollover (see notes) ────────────────────
-if (typeof window !== 'undefined'){
+// Dev-only: stripped from production builds so the shipped app exposes no
+// state-manipulation hooks on the global window object.
+if (import.meta.env.DEV && typeof window !== 'undefined'){
   window.EST_setToday = s => { localStorage.setItem('est-debug-today', s); location.reload(); };
   window.EST_simulateNextDay = () => { const n = dateKey(new Date(keyToDate(dateKey()).getTime() + DAY_MS)); localStorage.setItem('est-debug-today', n); location.reload(); };
   window.EST_clearSim = () => { localStorage.removeItem('est-debug-today'); location.reload(); };
