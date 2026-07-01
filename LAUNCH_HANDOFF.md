@@ -63,21 +63,32 @@ days old) doesn't send them — I tested it: the preflight returns `405`, so the
 would be blocked and fall back to the offline parser.
 
 My updated `functions/api/complete.js` (in this branch) adds that CORS handling **and** the
-abuse hardening. So the sequence is:
+abuse hardening.
 
-1. Review + merge this branch to `main`.
-2. Cloudflare auto-deploys the updated backend.
-3. **Then the in-app AI works** (and the endpoint is hardened).
+✅ **DEPLOYED & VERIFIED (live now).** The hardened backend is live on
+`est-repeat.pages.dev`: foreign origins get `403`, the app's cross-origin call gets proper
+CORS, and a native-origin parse returns JSON. In-app AI will work once the app build is
+installed.
 
-Until deployed, the app still works fully on its offline parser — the AI just isn't active
-inside the app yet. (AI already works on the website.)
+### ⚠️ How this site deploys (IMPORTANT — it is NOT git-push)
+This Cloudflare Pages project is **Direct Upload**, not connected to auto-deploy. Pushing to
+GitHub does **nothing** on its own. To publish site/backend changes you must run Wrangler
+from the repo (Wrangler is already logged in on this machine):
+
+```
+npm run build          # (with .env.production set aside, so the site uses a relative /api)
+npx wrangler pages deploy dist --project-name est-repeat --branch main --commit-dirty=true
+```
+
+That command uploads `dist/` **and** compiles `functions/` into the live backend.
 
 ---
 
 ## 3. Privacy policy
 
-- Written at `public/privacy.html` → publishes to **`https://your-domain/privacy.html`**.
-  That URL is what you paste into the Play "Privacy policy" field.
+- Written at `public/privacy.html`, **live now** at **`https://est-repeat.pages.dev/privacy`**
+  (Cloudflare serves it at the clean `/privacy` URL; `/privacy.html` 308-redirects there).
+  Paste **`https://est-repeat.pages.dev/privacy`** into the Play "Privacy policy" field.
 - It accurately describes the real data flow (local-only logs + the AI text-parsing call).
 - ✏️ **You must fill in one thing:** the contact email — search the file for
   `[ADD YOUR CONTACT EMAIL]` and replace it (decide if you want a personal or a branded
